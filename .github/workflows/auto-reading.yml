@@ -2,8 +2,9 @@ name: Auto Reading Bot
 
 on:
   schedule:
-    - cron: '0 0 * * *'    # UTC 00:00 = 北京时间 08:00
-    - cron: '0 12 * * *'   # UTC 12:00 = 北京时间 20:00
+    - cron: '30 0 * * *'   # UTC 00:30 = 北京时间 08:30（早饭后）
+    - cron: '30 4 * * *'   # UTC 04:30 = 北京时间 12:30（午休）
+    - cron: '0 13 * * *'   # UTC 13:00 = 北京时间 21:00（睡前）
   
   pull_request:
     branches: [ main ]
