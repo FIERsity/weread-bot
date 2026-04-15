@@ -5,7 +5,7 @@ on:
     # 避开 :00 / :30 的全局高峰分钟，降低 GitHub 定时任务漏触发概率
     - cron: '37 0 * * *'   # UTC 00:37 = 北京时间 08:37（早饭后）
     - cron: '17 4 * * *'   # UTC 04:17 = 北京时间 12:17（午休）
-    - cron: '0 8 * * *'    # UTC 08:00 = 北京时间 16:00（下午加读1小时）
+    - cron: '7 8 * * *'    # UTC 08:07 = 北京时间 16:07（下午加读1小时）
     - cron: '23 13 * * *'  # UTC 13:23 = 北京时间 21:23（睡前）
   
   pull_request:
@@ -72,6 +72,15 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
+    - name: Print trigger context
+      env:
+        EVENT_NAME: ${{ github.event_name }}
+        EVENT_SCHEDULE: ${{ github.event.schedule }}
+      run: |
+        echo "Trigger event: ${EVENT_NAME}"
+        echo "Trigger schedule: ${EVENT_SCHEDULE}"
+        echo "Current UTC time: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+
     - name: Resolve runtime parameters
       env:
         INPUT_TARGET_DURATION: ${{ github.event.inputs.target_duration }}
@@ -79,7 +88,7 @@ jobs:
         EVENT_NAME: ${{ github.event_name }}
         EVENT_SCHEDULE: ${{ github.event.schedule }}
       run: |
-        if [ "$EVENT_NAME" = "schedule" ] && [ "$EVENT_SCHEDULE" = "0 8 * * *" ]; then
+        if [ "$EVENT_NAME" = "schedule" ] && [ "$EVENT_SCHEDULE" = "7 8 * * *" ]; then
           echo "TARGET_DURATION=60-60" >> "$GITHUB_ENV"
           exit 0
         fi
