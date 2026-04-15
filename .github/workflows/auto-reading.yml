@@ -68,7 +68,7 @@ jobs:
           now_min=$((10#${now_cn%:*} * 60 + 10#${now_cn#*:}))
 
           matched="false"
-          for target in "08:37|default" "12:17|default" "16:07|60-60" "21:23|default"; do
+          for target in "08:37|default" "12:17|default" "16:07|60-60" "20:25|default" "21:23|default"; do
             IFS='|' read -r time_point duration <<< "$target"
             [ -z "$time_point" ] && continue
             target_min=$((10#${time_point%:*} * 60 + 10#${time_point#*:}))
