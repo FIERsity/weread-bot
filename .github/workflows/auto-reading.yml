@@ -6,6 +6,7 @@ on:
     - cron: '37 0 * * *'   # UTC 00:37 = 北京时间 08:37（早饭后）
     - cron: '17 4 * * *'   # UTC 04:17 = 北京时间 12:17（午休）
     - cron: '7 8 * * *'    # UTC 08:07 = 北京时间 16:07（下午加读1小时）
+    - cron: '23 12 * * *'  # UTC 12:23 = 北京时间 20:23（一次性测试，仅 2026-04-15 生效）
     - cron: '23 13 * * *'  # UTC 13:23 = 北京时间 21:23（睡前）
   
   pull_request:
@@ -88,6 +89,14 @@ jobs:
         EVENT_NAME: ${{ github.event_name }}
         EVENT_SCHEDULE: ${{ github.event.schedule }}
       run: |
+        if [ "$EVENT_NAME" = "schedule" ] && [ "$EVENT_SCHEDULE" = "23 12 * * *" ]; then
+          today_cn="$(TZ=Asia/Shanghai date +%F)"
+          if [ "$today_cn" != "2026-04-15" ]; then
+            echo "One-time 20:23 schedule already expired on 2026-04-15; skipping."
+            exit 0
+          fi
+        fi
+
         if [ "$EVENT_NAME" = "schedule" ] && [ "$EVENT_SCHEDULE" = "7 8 * * *" ]; then
           echo "TARGET_DURATION=60-60" >> "$GITHUB_ENV"
           exit 0
