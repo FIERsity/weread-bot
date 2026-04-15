@@ -1,0 +1,33 @@
+Aliyun WeRead Ops Entry
+
+1) First-time setup in this folder
+- cp ops/aliyun/server.env.example ops/aliyun/server.env
+- chmod +x ops/aliyun/*.sh
+
+2) Daily commands
+- Sync local code to server:
+  ops/aliyun/deploy_sync.sh
+- Run a remote command:
+  ops/aliyun/remote_exec.sh "cd /opt/weread-bot && source venv/bin/activate && python weread-bot.py --dry-run"
+- Install/update cron (default every 5 min):
+  ops/aliyun/install_cron.sh
+  ops/aliyun/install_cron.sh "*/10 * * * *"
+
+3) Where to put WeRead CURL credentials
+- Local repo: NOT FOUND (no real credential file/env present)
+- GitHub: workflow uses secrets.WEREAD_CURL_STRING, but secret values are not readable via repo files/API
+
+4) How to provide credentials safely
+- Option A (recommended): keep file on server only
+  /opt/weread-bot/secure/curl_command.txt
+  then set in /opt/weread-bot/config.yaml:
+  curl_config:
+    curl_bash_file_path: "/opt/weread-bot/secure/curl_command.txt"
+- Option B: set environment variable at runtime:
+  export WEREAD_CURL_STRING='curl ...'
+
+5) Quick checks
+- Check cron:
+  ops/aliyun/remote_exec.sh "crontab -l"
+- Check logs:
+  ops/aliyun/remote_exec.sh "tail -n 100 /opt/weread-bot/logs/cron.log"
