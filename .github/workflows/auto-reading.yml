@@ -2,12 +2,8 @@ name: Auto Reading Bot
 
 on:
   schedule:
-    # 避开 :00 / :30 的全局高峰分钟，降低 GitHub 定时任务漏触发概率
-    - cron: '37 0 * * *'   # UTC 00:37 = 北京时间 08:37（早饭后）
-    - cron: '17 4 * * *'   # UTC 04:17 = 北京时间 12:17（午休）
-    - cron: '7 8 * * *'    # UTC 08:07 = 北京时间 16:07（下午加读1小时）
-    - cron: '23 12 * * *'  # UTC 12:23 = 北京时间 20:23（一次性测试，仅 2026-04-15 生效）
-    - cron: '23 13 * * *'  # UTC 13:23 = 北京时间 21:23（睡前）
+    # 每5分钟心跳一次（避开 :00），实际是否执行由北京时间时间窗判定
+    - cron: '3-58/5 * * * *'
   
   pull_request:
     branches: [ main ]
@@ -60,20 +56,69 @@ jobs:
     timeout-minutes: 120  # 2小时超时
     
     steps:
+    - name: Decide schedule window
+      env:
+        EVENT_NAME: ${{ github.event_name }}
+      run: |
+        should_run="true"
+        target_duration_override=""
+
+        if [ "$EVENT_NAME" = "schedule" ]; then
+          now_cn="$(TZ=Asia/Shanghai date +%H:%M)"
+          now_min=$((10#${now_cn%:*} * 60 + 10#${now_cn#*:}))
+
+          matched="false"
+          for target in "08:37|default" "12:17|default" "16:07|60-60" "21:23|default"; do
+            IFS='|' read -r time_point duration <<< "$target"
+            [ -z "$time_point" ] && continue
+            target_min=$((10#${time_point%:*} * 60 + 10#${time_point#*:}))
+            delta=$((now_min - target_min))
+            [ $delta -lt 0 ] && delta=$(( -delta ))
+
+            # 允许前后2分钟容差：每个目标时间最多命中一次心跳
+            if [ $delta -le 2 ]; then
+              matched="true"
+              if [ "$duration" != "default" ]; then
+                target_duration_override="$duration"
+              fi
+              break
+            fi
+          done
+
+          if [ "$matched" != "true" ]; then
+            should_run="false"
+            echo "Skip schedule heartbeat at ${now_cn} (not in execution window)."
+          else
+            echo "Matched schedule window at ${now_cn}."
+          fi
+        fi
+
+        echo "SHOULD_RUN=$should_run" >> "$GITHUB_ENV"
+        echo "TARGET_DURATION_OVERRIDE=$target_duration_override" >> "$GITHUB_ENV"
+
+    - name: Skip outside schedule window
+      if: env.SHOULD_RUN != 'true'
+      run: |
+        echo "Current heartbeat is outside execution window. Workflow ends successfully."
+
     - name: Checkout code
+      if: env.SHOULD_RUN == 'true'
       uses: actions/checkout@v4
 
     - name: Set up Python 3.11
+      if: env.SHOULD_RUN == 'true'
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
 
     - name: Install dependencies
+      if: env.SHOULD_RUN == 'true'
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
     - name: Print trigger context
+      if: env.SHOULD_RUN == 'true'
       env:
         EVENT_NAME: ${{ github.event_name }}
         EVENT_SCHEDULE: ${{ github.event.schedule }}
@@ -83,22 +128,15 @@ jobs:
         echo "Current UTC time: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
 
     - name: Resolve runtime parameters
+      if: env.SHOULD_RUN == 'true'
       env:
         INPUT_TARGET_DURATION: ${{ github.event.inputs.target_duration }}
         SECRET_TARGET_DURATION: ${{ secrets.TARGET_DURATION }}
         EVENT_NAME: ${{ github.event_name }}
-        EVENT_SCHEDULE: ${{ github.event.schedule }}
+        TARGET_DURATION_OVERRIDE: ${{ env.TARGET_DURATION_OVERRIDE }}
       run: |
-        if [ "$EVENT_NAME" = "schedule" ] && [ "$EVENT_SCHEDULE" = "23 12 * * *" ]; then
-          today_cn="$(TZ=Asia/Shanghai date +%F)"
-          if [ "$today_cn" != "2026-04-15" ]; then
-            echo "One-time 20:23 schedule already expired on 2026-04-15; skipping."
-            exit 0
-          fi
-        fi
-
-        if [ "$EVENT_NAME" = "schedule" ] && [ "$EVENT_SCHEDULE" = "7 8 * * *" ]; then
-          echo "TARGET_DURATION=60-60" >> "$GITHUB_ENV"
+        if [ -n "$TARGET_DURATION_OVERRIDE" ]; then
+          echo "TARGET_DURATION=$TARGET_DURATION_OVERRIDE" >> "$GITHUB_ENV"
           exit 0
         fi
 
@@ -115,6 +153,7 @@ jobs:
         echo "TARGET_DURATION=$target_duration" >> "$GITHUB_ENV"
 
     - name: Create config file
+      if: env.SHOULD_RUN == 'true'
       run: |
         cat > config.yaml <<EOF
         app:
@@ -174,9 +213,11 @@ jobs:
         EOF
 
     - name: Create logs directory
+      if: env.SHOULD_RUN == 'true'
       run: mkdir -p logs
 
     - name: Run WeRead Bot
+      if: env.SHOULD_RUN == 'true'
       env:
         # Cookie刷新QL属性，根据不同用户的环境，可能需要设置为True或False来确保cookie刷新正常工作，默认值为false
         HACK_COOKIE_REFRESH_QL: ${{ secrets.HACK_COOKIE_REFRESH_QL }}
@@ -238,7 +279,7 @@ jobs:
         python weread-bot.py --config config.yaml
 
     - name: Upload runtime artifacts
-      if: always()
+      if: always() && env.SHOULD_RUN == 'true'
       uses: actions/upload-artifact@v4
       with:
         name: weread-runtime-${{ github.run_id }}
